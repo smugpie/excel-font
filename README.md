@@ -7,7 +7,11 @@ a certain way, to a font usable by PC/Macs.
 
 One example spreadsheet is included to get you going.
 
-Uses [fontParts](https://fontparts.robotools.dev/en/stable/) and [fontmake](https://github.com/googlefonts/fontmake).
+Uses:
+
+- [fontParts](https://fontparts.robotools.dev/en/stable/)
+- [fontmake](https://github.com/googlefonts/fontmake)
+- [pandas](https://pandas.pydata.org/)
 
 ## Why?
 

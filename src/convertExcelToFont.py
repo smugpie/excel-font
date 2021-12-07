@@ -4,6 +4,7 @@ import getopt
 from shutil import rmtree
 from drawing import draw_pixel
 from utils import index_contains
+from fontTools import agl
 from fontParts.world import *
 from fontmake import font_project
 import pandas
@@ -46,7 +47,6 @@ def main(argv):
         print('Please specify the path to an output file')
         sys.exit(2)
         
-
     excel_file = pandas.read_excel(input_file, header=None)
     metrics = (list(excel_file[0]))
     bottom = index_contains(metrics, 'bottom') + 1
@@ -54,29 +54,22 @@ def main(argv):
     pixels_below_baseline = bottom - baseline
     y_size = bottom - index_contains(metrics, 'top')
 
-    print(bottom, baseline, pixels_below_baseline, y_size)
-
-    upm = 1000
-
     font = NewFont(familyName=font_name, showInterface=False)
     font.info.unitsPerEm = 1000
 
-    def getMeasurement(pixels_below_base, bottom, pixel_size, metrics, measurement):
+    def getMeasurement(measurement):
         position = index_contains(metrics, measurement)
-
-        return (bottom - pixels_below_base - position) * pixel_size
-
+        return (bottom - pixels_below_baseline - position) * pixel_size
 
     try:
         layer = font.layers[0]
         layer.name = 'Regular'
 
         pixel_size = int(font.info.unitsPerEm / y_size)
-        print('Font size:', y_size, '... Baseline:', baseline, '...Block size:', pixel_size)
-        font.info.xHeight = getMeasurement(pixels_below_baseline, bottom, pixel_size, metrics, "xheight") 
-        font.info.capHeight = getMeasurement(pixels_below_baseline, bottom, pixel_size, metrics, "capheight") 
-        font.info.ascender = getMeasurement(pixels_below_baseline, bottom, pixel_size, metrics, "ascender") 
-        font.info.descender = getMeasurement(pixels_below_baseline, bottom, pixel_size, metrics, "descender") 
+        font.info.xHeight = getMeasurement("xheight") 
+        font.info.capHeight = getMeasurement("capheight") 
+        font.info.ascender = getMeasurement("ascender") 
+        font.info.descender = getMeasurement("descender") 
 
         current_row = 0
 
@@ -101,7 +94,8 @@ def main(argv):
 
         for glyph_name, glyph_pixels in glyphs.items():
             glyph = font.newGlyph(glyph_name)
-
+            
+            glyph.unicode = ord(agl.toUnicode(glyph_name))
             glyph.width = (len(glyph_pixels[0]) * pixel_size)
 
             for row_number, row_data in enumerate(glyph_pixels):
