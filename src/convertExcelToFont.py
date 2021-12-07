@@ -2,7 +2,7 @@
 import sys
 import getopt
 from shutil import rmtree
-from drawing import drawPixel
+from drawing import draw_pixel
 from utils import index_contains
 from fontParts.world import *
 from fontmake import font_project
@@ -10,10 +10,10 @@ import pandas
 
 
 def main(argv):
-    inputFile = ''
-    outputFile = ''
-    fontFormat = ''
-    fontName = ''
+    input_file = ''
+    output_file = ''
+    font_format = ''
+    font_name = ''
     try:
         opts, args = getopt.getopt(argv,"hi:o:f:n:",["input_file=","output_file=","format=","name="])
     except getopt.GetoptError:
@@ -27,100 +27,101 @@ def main(argv):
             print('where format is one of ufo, ttf, otf')
             sys.exit()
         elif opt in ("-i", "--input_file"):
-            inputFile = arg
+            input_file = arg
         elif opt in ("-o", "--output_file"):
-            outputFile = arg
+            output_file = arg
         elif opt in ("-f", "--format"):
-            fontFormat = arg
-            if fontFormat not in ('ufo', 'ttf', 'otf'):
+            font_format = arg
+            if font_format not in ('ufo', 'ttf', 'otf'):
                 print('Format must be one of ufo, ttf, otf')
                 sys.exit(2)
         elif opt in ("-n", "--name"):
-            fontName = arg
+            font_name = arg
 
-    if inputFile == '':
+    if input_file == '':
         print('Please specify the path to an input file')
         sys.exit(2)
     
-    if outputFile == '':
+    if output_file == '':
         print('Please specify the path to an output file')
         sys.exit(2)
         
 
-    excelFile = pandas.read_excel(inputFile, header=None)
-    metrics = (list(excelFile[0]))
-    bottom = index_contains(metrics, 'bottom')
-    ySize = bottom - index_contains(metrics, 'top') + 1
-    ascender = bottom - index_contains(metrics, 'ascender')
-    capHeight = bottom - index_contains(metrics, 'capheight')
-    xHeight = bottom - index_contains(metrics, 'xheight')
-    baseline = bottom - index_contains(metrics, 'baseline')
-    descender = bottom - index_contains(metrics, 'descender')
+    excel_file = pandas.read_excel(input_file, header=None)
+    metrics = (list(excel_file[0]))
+    bottom = index_contains(metrics, 'bottom') + 1
+    baseline = index_contains(metrics, 'baseline')
+    pixels_below_baseline = bottom - baseline
+    y_size = bottom - index_contains(metrics, 'top')
 
-    font = NewFont(familyName=fontName, showInterface=False)
+    print(bottom, baseline, pixels_below_baseline, y_size)
+
+    upm = 1000
+
+    font = NewFont(familyName=font_name, showInterface=False)
     font.info.unitsPerEm = 1000
+
+    def getMeasurement(pixels_below_base, bottom, pixel_size, metrics, measurement):
+        position = index_contains(metrics, measurement)
+
+        return (bottom - pixels_below_base - position) * pixel_size
+
 
     try:
         layer = font.layers[0]
         layer.name = 'Regular'
 
-        pixelSize = int(font.info.unitsPerEm / ySize)
-        print('Font size:', ySize, '... Baseline:', baseline, '...Block size:', pixelSize)
-        pixelsBelowBaseline = ySize - baseline
-        font.info.xHeight = (xHeight - pixelsBelowBaseline) * pixelSize 
-        font.info.capHeight = (capHeight - pixelsBelowBaseline) * pixelSize        # work out ascender from the letter b (ASCII code 98)
-        font.info.ascender = (ascender - pixelsBelowBaseline) * pixelSize
-        font.info.descender = (descender - pixelsBelowBaseline) * pixelSize
+        pixel_size = int(font.info.unitsPerEm / y_size)
+        print('Font size:', y_size, '... Baseline:', baseline, '...Block size:', pixel_size)
+        font.info.xHeight = getMeasurement(pixels_below_baseline, bottom, pixel_size, metrics, "xheight") 
+        font.info.capHeight = getMeasurement(pixels_below_baseline, bottom, pixel_size, metrics, "capheight") 
+        font.info.ascender = getMeasurement(pixels_below_baseline, bottom, pixel_size, metrics, "ascender") 
+        font.info.descender = getMeasurement(pixels_below_baseline, bottom, pixel_size, metrics, "descender") 
 
-        currentRow = 0
+        current_row = 0
 
         glyphs = {}
 
-        while currentRow < len(excelFile.index):
-            glyphPositions = excelFile[currentRow:currentRow + 1].values.tolist()[0][1:]
-            glyphData = excelFile[currentRow + 1:currentRow + ySize + 1].values.tolist()
-            print(glyphPositions, glyphData)
+        # iterate over each row of lettering in Excel
+        # ... and grab the glyph names and locations of the data
+        while current_row < len(excel_file.index):
+            glyph_positions = excel_file[current_row:current_row + 1].values.tolist()[0][1:]
+            glyph_data = excel_file[current_row + 1:current_row + y_size + 1].values.tolist()
+            glyph_names = set([item for item in glyph_positions if isinstance(item, str)])
 
-            glyphNames = set([item for item in glyphPositions if isinstance(item, str)])
-            for glyph in glyphNames:
+            for glyph in glyph_names:
                 glyphs[glyph] = []
-                startPos = glyphPositions.index(glyph)
-                endPos = next(i for i in reversed(range(len(glyphPositions))) if glyphPositions[i] == glyph)
-                print(glyph, startPos, endPos)
+                start_position = glyph_positions.index(glyph)
+                end_position = next(i for i in reversed(range(len(glyph_positions))) if glyph_positions[i] == glyph)
 
-                for row in glyphData:
-                    glyphs[glyph].append(row[startPos + 1:endPos + 2])
+                for row in glyph_data:
+                    glyphs[glyph].append(row[start_position + 1:end_position + 2])
 
-            currentRow += (ySize + 1)
+            current_row += (y_size + 1)
 
-            print(glyphs['B'])
+        for glyph_name, glyph_pixels in glyphs.items():
+            glyph = font.newGlyph(glyph_name)
 
-        for glyphName, glyphPixels in glyphs.items():
-            print('Creating', glyphName)
+            glyph.width = (len(glyph_pixels[0]) * pixel_size)
 
-            glyph = font.newGlyph(glyphName)
-
-            glyph.width = (len(glyphPixels[0]) * pixelSize)
-
-            for rowNumber, rowData in enumerate(glyphPixels):
-                rowPosition = ySize - rowNumber - pixelsBelowBaseline
-                for colNumber, colData in enumerate(rowData):
-                    colPosition = colNumber
-                    if str(colData) == '1':
-                        rect = drawPixel( rowPosition, colPosition, pixelSize )
+            for row_number, row_data in enumerate(glyph_pixels):
+                row_position = y_size - row_number - pixels_below_baseline - 1
+                for col_number, col_data in enumerate(row_data):
+                    if str(col_data) == '1':
+                        rect = draw_pixel( row_position, col_number, pixel_size )
                         glyph.appendContour(rect)
             glyph.removeOverlap()
 
-        if fontFormat == 'ufo':
-            font.save(outputFile)
+        if font_format == 'ufo':
+            font.save(output_file)
         else:
             font.save('./tmp/tmpFont.ufo')
             fontmaker = font_project.FontProject()
             ufo = fontmaker.open_ufo('./tmp/tmpFont.ufo')
-            if fontFormat == 'otf':
-                fontmaker.build_otfs([ufo], output_path=outputFile)
+            if font_format == 'otf':
+                fontmaker.build_otfs([ufo], output_path=output_file)
             else:
-                fontmaker.build_ttfs([ufo], output_path=outputFile)
+                fontmaker.build_ttfs([ufo], output_path=output_file)
             rmtree('./tmp/tmpFont.ufo')
 
         print('Job done. Enjoy the pixels.')

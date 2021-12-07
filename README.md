@@ -1,4 +1,5 @@
 # excel-font: Use MS Excel to create pixel fonts
+
 ## What's here
 
 A script to convert an Excel spreadsheet, formatted in
@@ -8,15 +9,20 @@ One example spreadsheet is included to get you going.
 
 Uses [fontParts](https://fontparts.robotools.dev/en/stable/) and [fontmake](https://github.com/googlefonts/fontmake).
 
-# Why?
+## Why?
 
 Good question, and one I fully intend to answer when I
 actually have an answer.
 
+## Prerequisites
+
 - Python - tested on v3.9.
+- To design fonts - a program capable of saving files in Microsoft Excel .xlsx format.
+
 ## Installation
 
-The best way of running Python is to create a virtual environment. Open a terminal in this folder (`/python`)
+The best way of running Python is to create a virtual environment. Open a terminal in the root folder
+of this project.
 
 ```
 python3 -m venv .
