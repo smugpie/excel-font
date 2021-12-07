@@ -1,13 +1,9 @@
 #!/usr/bin/python3
-
-import json
 import sys
 import getopt
 from shutil import rmtree
-from metrics import getHeight, getDepth
 from drawing import drawPixel
-from style import getHumanReadableStyle, expandStyle, expandFlags
-from utils import chunks, getRange, getNiceGlyphName
+from utils import index_contains
 from fontParts.world import *
 from fontmake import font_project
 import pandas
@@ -52,75 +48,65 @@ def main(argv):
         
 
     excelFile = pandas.read_excel(inputFile, header=None)
-    print(excelFile)
     metrics = (list(excelFile[0]))
-    print(metrics)
-    ySize = metrics.index('bottom') - metrics.index('top')
-    ascender = metrics.index('bottom') - metrics.index('ascender')
-    capHeight = metrics.index('bottom') - metrics.index('capHeight')
-    baseline = metrics.index('bottom') - metrics.index('baseline')
-    xHeight = metrics.index('bottom') - metrics.index('xheight')
-    descender = metrics.index('bottom') - metrics.index('descender')
-
-
-    fontBitmapRows = list(chunks(fontBitArray, modulo * 8))
-
-    print('Parsing', fontName)
-    print(flagsDict, styleDict)
-
-    glyphs = {}
-
-    for i in range(0, charRange):
-        charCode = loChar + i
-        locationStart = int.from_bytes(locationData[i * 4:i * 4 + 2], byteorder='big', signed=False)
-        bitLength = int.from_bytes(locationData[i * 4 + 2:i * 4 + 4], byteorder='big', signed=False)
-        charCodeIndex = '.notdef' if charCode > hiChar else str(charCode)
-        glyphs[charCodeIndex] = {
-            "character": '.notdef' if charCode > hiChar else chr(charCode),
-            "bitmap": list(map(lambda arr: getRange(arr, locationStart, bitLength), fontBitmapRows))
-        }
-        if flagsDict['proportional']:
-            glyphs[charCodeIndex]['kerning'] = int.from_bytes(kerningData[i * 2: i * 2 + 2], byteorder='big', signed=True)
-            glyphs[charCodeIndex]['spacing'] = int.from_bytes(spacingData[i * 2: i * 2 + 2], byteorder='big', signed=True)
+    bottom = index_contains(metrics, 'bottom')
+    ySize = bottom - index_contains(metrics, 'top') + 1
+    ascender = bottom - index_contains(metrics, 'ascender')
+    capHeight = bottom - index_contains(metrics, 'capheight')
+    xHeight = bottom - index_contains(metrics, 'xheight')
+    baseline = bottom - index_contains(metrics, 'baseline')
+    descender = bottom - index_contains(metrics, 'descender')
 
     font = NewFont(familyName=fontName, showInterface=False)
     font.info.unitsPerEm = 1000
 
-
     try:
         layer = font.layers[0]
-        layer.name = getHumanReadableStyle(styleDict)
+        layer.name = 'Regular'
 
         pixelSize = int(font.info.unitsPerEm / ySize)
         print('Font size:', ySize, '... Baseline:', baseline, '...Block size:', pixelSize)
         pixelsBelowBaseline = ySize - baseline
-        font.info.xHeight = xHeight * pixelSize
-        font.info.capHeight = capHeight * pixelSize        # work out ascender from the letter b (ASCII code 98)
-        font.info.ascender = ascender * pixelSize
-        font.info.descender = descender * pixelSize
+        font.info.xHeight = (xHeight - pixelsBelowBaseline) * pixelSize 
+        font.info.capHeight = (capHeight - pixelsBelowBaseline) * pixelSize        # work out ascender from the letter b (ASCII code 98)
+        font.info.ascender = (ascender - pixelsBelowBaseline) * pixelSize
+        font.info.descender = (descender - pixelsBelowBaseline) * pixelSize
 
+        currentRow = 0
 
+        glyphs = {}
 
-        for char, amigaGlyph in glyphs.items():
-            if amigaGlyph['character'] == '.notdef':
-                glyphName = '.notdef'
-            else:
-                unicodeInt = ord(amigaGlyph['character'])
-                glyphName = getNiceGlyphName(unicodeInt)
-                print('Creating', unicodeInt, glyphName)
+        while currentRow < len(excelFile.index):
+            glyphPositions = excelFile[currentRow:currentRow + 1].values.tolist()[0][1:]
+            glyphData = excelFile[currentRow + 1:currentRow + ySize + 1].values.tolist()
+            print(glyphPositions, glyphData)
+
+            glyphNames = set([item for item in glyphPositions if isinstance(item, str)])
+            for glyph in glyphNames:
+                glyphs[glyph] = []
+                startPos = glyphPositions.index(glyph)
+                endPos = next(i for i in reversed(range(len(glyphPositions))) if glyphPositions[i] == glyph)
+                print(glyph, startPos, endPos)
+
+                for row in glyphData:
+                    glyphs[glyph].append(row[startPos + 1:endPos + 2])
+
+            currentRow += (ySize + 1)
+
+            print(glyphs['B'])
+
+        for glyphName, glyphPixels in glyphs.items():
+            print('Creating', glyphName)
 
             glyph = font.newGlyph(glyphName)
-            
-            if amigaGlyph['character'] != '.notdef':
-                glyph.unicode = unicodeInt
 
-            glyph.width = ((amigaGlyph['spacing'] + amigaGlyph['kerning']) * pixelSize) if flagsDict['proportional'] else (xSize * pixelSize)
+            glyph.width = (len(glyphPixels[0]) * pixelSize)
 
-            for rowNumber, rowData in enumerate(amigaGlyph['bitmap']):
+            for rowNumber, rowData in enumerate(glyphPixels):
                 rowPosition = ySize - rowNumber - pixelsBelowBaseline
                 for colNumber, colData in enumerate(rowData):
-                    colPosition = (colNumber + amigaGlyph['kerning']) if flagsDict['proportional'] else colNumber
-                    if colData == '1':
+                    colPosition = colNumber
+                    if str(colData) == '1':
                         rect = drawPixel( rowPosition, colPosition, pixelSize )
                         glyph.appendContour(rect)
             glyph.removeOverlap()
